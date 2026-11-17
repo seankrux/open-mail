@@ -182,8 +182,11 @@ export async function verifyDraft(ai: Ai, body: string): Promise<string> {
 			? `${cleanedTrimmed}\n\n${quotedBlock}`
 			: cleanedTrimmed;
 	} catch (e) {
-				console.error("AI failed — returns empty body, callers may save blank draft:", (e as Error).message);
-		return "";
+		// Fail open: a down or unauthorized model must not blank the draft.
+		// Callers (send_email included) treat an empty return as "refuse to
+		// send", which blocked real mail when the Gateway AI call failed.
+		console.error("Draft verifier AI failed; keeping original body:", (e as Error).message);
+		return body;
 	}
 }
 
