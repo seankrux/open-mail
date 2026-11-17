@@ -20,8 +20,30 @@ import { app as apiApp, receiveEmail } from "./index";
 import { withNamedAgents } from "./everyapp/inbound";
 import { guardMailboxSettings, stampMailboxOwner } from "./everyapp/settings-routes";
 import { gmailRoutes } from "./everyapp/gmail/routes";
+import { readMailboxSettings } from "./everyapp/mailbox-settings";
 import { tools } from "./everyapp/tools";
 import type { Env } from "./types";
+
+/** Cloudflare Email Routing event: receiveEmail only needs raw/rawSize; forward() is how a mailbox settings copy is sent to a verified destination. */
+type InboundEmail = {
+	raw: ReadableStream;
+	rawSize: number;
+	to?: string;
+	headers?: Headers;
+	forward?: (destination: string, headers?: Headers) => Promise<void>;
+};
+
+function forwardingDestination(settings: { forwarding?: { enabled?: boolean; email?: string } } | null): string {
+	const dest = settings?.forwarding?.enabled ? (settings.forwarding.email || "").trim() : "";
+	return dest;
+}
+
+function envelopeRecipient(event: InboundEmail): string {
+	const headerTo = event.headers?.get?.("delivered-to") || event.headers?.get?.("to") || "";
+	const raw = `${event.to || ""} ${headerTo}`;
+	const match = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+	return (match ? match[0] : event.to || "").trim().toLowerCase();
+}
 
 import type { MailboxDO as UpstreamMailboxDO } from "./durableObject";
 import { MailboxDO as LabeledMailboxDO } from "./everyapp/mailbox";
@@ -120,12 +142,29 @@ export default {
 		},
 		{ tools },
 	),
-	async email(
-		event: { raw: ReadableStream; rawSize: number },
-		env: Env,
-		ctx: ExecutionContext,
-	) {
+	async email(event: InboundEmail, env: Env, ctx: ExecutionContext) {
 		try {
+			// Copy-forward first (settings.forwarding) so reading event.raw in
+			// receiveEmail cannot starve message.forward(). A failed copy must
+			// not drop the OpenMail store. Routing allows only one action, so
+			// this is how a verified IMAP mailbox gets a copy too.
+			const mailboxId = envelopeRecipient(event);
+			if (mailboxId && typeof event.forward === "function") {
+				const settings = await readMailboxSettings(env.BUCKET, mailboxId).catch(() => null);
+				const dest = forwardingDestination(settings);
+				if (dest) {
+					try {
+						await event.forward(dest);
+						console.log(`Copy-forwarded ${mailboxId}`);
+					} catch (e) {
+						console.error("Mailbox copy-forward failed:", (e as Error).message);
+					}
+				} else {
+					console.log(`Copy-forward skipped for ${mailboxId}: no destination`);
+				}
+			} else {
+				console.log(`Copy-forward skipped: mailboxId=${mailboxId || "empty"} forward=${typeof event.forward}`);
+			}
 			// withNamedAgents() lets the auto-draft reach a mailbox's agent
 			// before its chat panel was ever opened (workers/everyapp/inbound.ts);
 			// receiveEmail() itself is upstream's, byte-identical.
