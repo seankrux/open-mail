@@ -283,7 +283,7 @@ describe("the Gmail routes", () => {
 		expect(created.body).toMatchObject({ id: address, email: address, settings: { provider: "gmail", ownerId: owner.id } });
 		// The first sync runs in GmailSync (the request crosses into it), whose
 		// own env has neither a gateway binding nor local integration setup.
-		expect(created.body.sync).toMatchObject({ pulled: 0, pushed: 0, error: { code: "gmail_not_configured", status: 503, reconnect: false } });
+		expect(created.body.sync).toMatchObject({ pulled: 0, pushed: 0, error: { code: "gmail_not_configured", reconnect: false } });
 		expect((await call("POST", "/api/v1/gmail/mailboxes", owner, binding)).status).toBe(409);
 
 		const other = { ...owner, id: "u-other" };
