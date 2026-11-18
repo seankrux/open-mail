@@ -5,8 +5,7 @@ packages:
 
 # The npm `overrides` upstream ships, in pnpm's form.
 overrides:
-  # @cloudflare/kumo bundles zod 4 types against the app's zod 3.25 schemas;
-  # upstream pins kumo's zod to the app's own.
+  # Keep Kumo and the app on the same patched schema implementation.
   "@cloudflare/kumo>zod": "$zod"
   # TipTap: one version across the editor's packages.
   "@tiptap/core": "3.34.0"
