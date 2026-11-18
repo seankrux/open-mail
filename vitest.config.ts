@@ -12,16 +12,14 @@
 // `*.workers.test.ts` or listed in WORKERS_TESTS; everything else is a node
 // test. This file replaces vite.config.ts for Vitest, so the Cloudflare and
 // React Router plugins never load under test.
-import { defineWorkersProject } from "@cloudflare/vitest-pool-workers/config";
+import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { configDefaults, defineConfig } from "vitest/config";
 import manifest from "./everyapp.config.ts";
 
 const WORKERS_TESTS = ["test/**/*.workers.test.ts", "test/receive-email.test.ts"];
 
-// The workerd that @cloudflare/vitest-pool-workers 0.12 bundles (the last line
-// for Vitest 3) supports compatibility dates up to 2026-03-10; deployed, the
-// Worker runs on the platform default (2026-06-01). Raise this with the pool.
+// Keep the existing test compatibility date during the Vitest migration.
 const TEST_COMPATIBILITY_DATE = "2026-03-10";
 
 export default defineConfig({
@@ -39,61 +37,51 @@ export default defineConfig({
           exclude: [...configDefaults.exclude, ...WORKERS_TESTS],
         },
       },
-      defineWorkersProject({
-        plugins: [tsconfigPaths()],
+      {
+        plugins: [
+          tsconfigPaths(),
+          cloudflareTest({
+            main: "./workers/app.ts",
+            miniflare: {
+              compatibilityDate: TEST_COMPATIBILITY_DATE,
+              compatibilityFlags: ["nodejs_compat"],
+              // The manifest's SQLite Durable Objects, as everyAppWorker()
+              // binds them on the deployed Worker.
+              durableObjects: Object.fromEntries(
+                manifest.resources.durableObjects.map((d) => [
+                  d.name,
+                  { className: d.className, useSQLite: true },
+                ]),
+              ),
+              r2Buckets: ["BUCKET"],
+              // The app's plain settings (cloudflare.config.ts) at their
+              // defaults, and the identity settings `everyapp deploy` writes:
+              // the audience is the Worker's name. No identity key is bound;
+              // tests that need one pass EVERYAPP_IDENTITY_PUBLIC_KEYS in the
+              // env they call the entry with.
+              bindings: {
+                DOMAINS: "example.com",
+                EMAIL_ADDRESSES: [],
+                AI_PROVIDER: "",
+                AGENT_MODEL: "",
+                // The gmail feature's switch, on so the Gmail tests reach
+                // its routes and alarm; tests of the off state pass "".
+                EXPERIMENTAL_GMAIL: "true",
+                EVERYAPP_APP_ID: manifest.id,
+                EVERYAPP_AUDIENCE: `every-acme-${manifest.id}`,
+                EVERYAPP_IDENTITY_ISSUER: "https://gateway.example.com",
+              },
+            },
+          }),
+        ],
         test: {
           name: "workers",
           include: WORKERS_TESTS,
-          // Each test wakes real SQLite Durable Objects in workerd (inbound
-          // mail wakes EmailAgent too): a few seconds a test on a busy
-          // machine, past Vitest's 5 s default.
           testTimeout: 30_000,
-          poolOptions: {
-            workers: {
-              // The production entry: its exports are the Durable Object
-              // classes the bindings below resolve to.
-              main: "./workers/app.ts",
-              // Every test file in one Worker, sharing the DOs and the R2
-              // bucket: use a fresh mailbox address per test. Isolated storage
-              // stays off because the pool can't undo SQLite Durable Object
-              // storage that is still open ("Expected .sqlite, got
-              // ….sqlite-shm"), and receiveEmail() always wakes EmailAgent.
-              singleWorker: true,
-              isolatedStorage: false,
-              miniflare: {
-                compatibilityDate: TEST_COMPATIBILITY_DATE,
-                compatibilityFlags: ["nodejs_compat"],
-                // The manifest's SQLite Durable Objects, as everyAppWorker()
-                // binds them on the deployed Worker.
-                durableObjects: Object.fromEntries(
-                  manifest.resources.durableObjects.map((d) => [
-                    d.name,
-                    { className: d.className, useSQLite: true },
-                  ]),
-                ),
-                r2Buckets: ["BUCKET"],
-                // The app's plain settings (cloudflare.config.ts) at their
-                // defaults, and the identity settings `everyapp deploy` writes:
-                // the audience is the Worker's name. No identity key is bound;
-                // tests that need one pass EVERYAPP_IDENTITY_PUBLIC_KEYS in the
-                // env they call the entry with.
-                bindings: {
-                  DOMAINS: "example.com",
-                  EMAIL_ADDRESSES: [],
-                  AI_PROVIDER: "",
-                  AGENT_MODEL: "",
-                  // The gmail feature's switch, on so the Gmail tests reach
-                  // its routes and alarm; tests of the off state pass "".
-                  EXPERIMENTAL_GMAIL: "true",
-                  EVERYAPP_APP_ID: manifest.id,
-                  EVERYAPP_AUDIENCE: `every-acme-${manifest.id}`,
-                  EVERYAPP_IDENTITY_ISSUER: "https://gateway.example.com",
-                },
-              },
-            },
-          },
+          maxWorkers: 1,
+          isolate: false,
         },
-      }),
+      },
     ],
   },
 });
