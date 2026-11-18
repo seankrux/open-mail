@@ -78,6 +78,7 @@ export default defineConfig({
           name: "workers",
           include: WORKERS_TESTS,
           testTimeout: 30_000,
+          sequence: { groupOrder: 1 },
           maxWorkers: 1,
           isolate: false,
         },
