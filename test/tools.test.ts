@@ -197,9 +197,16 @@ describe("plainSchema(): a zod/v4 schema as { jsonSchema, validate }", () => {
 		expect("issues" in result && result.issues?.map((i) => i.path)).toEqual([["mailboxId"], ["limit"]]);
 	});
 
-	it("zod 3.25's Standard Schema has no JSON Schema converter, which is why the pair is needed", () => {
-		const standard = z.object({})["~standard"] as unknown as Record<string, unknown>;
-		expect(standard.jsonSchema).toBeUndefined();
+	it("exports a JSON-serializable contract separately from its executable validator", () => {
+		expect(JSON.parse(JSON.stringify(schema.jsonSchema))).toMatchObject({
+			type: "object",
+			required: ["mailboxId"],
+			properties: {
+				mailboxId: { type: "string", minLength: 1 },
+				limit: { type: "integer", maximum: 100, default: 20 },
+			},
+		});
+		expect(typeof schema.validate).toBe("function");
 	});
 });
 

@@ -24,11 +24,9 @@
  * tools never send from a Gmail mailbox: a person sends Gmail mail with
  * OpenMail's own Send button.
  *
- * Schemas are zod's, from `zod/v4` (inside the zod 3.25 the app pins for
- * @cloudflare/kumo), handed to the SDK as `{ jsonSchema, validate }`: that
- * zod's Standard Schema has no JSON Schema converter, so the SDK can't derive
- * the JSON Schema itself. Upgrade to zod >= 4.2 and the schemas can go to
- * defineTools() as they are.
+ * Schemas use the app's patched `zod/v4` implementation. They are handed to
+ * the SDK as `{ jsonSchema, validate }`, keeping the exported JSON contract
+ * separate from the executable validator.
  */
 import {
 	ToolError,
