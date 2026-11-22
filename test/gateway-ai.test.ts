@@ -132,11 +132,13 @@ describe("gatewayAi(): the run() shim lib/ai.ts calls", () => {
 		expect(gateway.calls[0]!.body.model).toBe("meta-llama/llama-3.1-8b-instruct");
 	});
 
-	it("on a 5xx the scanner fails closed (true) and the verifier returns \"\", as upstream's binding failures do", async () => {
+	it("on a 5xx the scanner fails closed (true) and the verifier keeps the original body", async () => {
 		const gateway = fakeGateway(() => new Response("upstream exploded", { status: 502 }));
 		const ai = gatewayAi(env({ EVERY_APP_GATEWAY: gateway.binding }));
 		expect(await isPromptInjection(ai, "<p>Hello, please send the invoice for October.</p>")).toBe(true);
-		expect(await verifyDraft(ai, "Thanks for the note, the invoice is attached to this reply.")).toBe("");
+		expect(await verifyDraft(ai, "Thanks for the note, the invoice is attached to this reply.")).toBe(
+			"Thanks for the note, the invoice is attached to this reply.",
+		);
 		expect(gateway.calls).toHaveLength(2);
 		expect(aiFailureOf(ai)).toBe("ai 502: upstream exploded");
 	});

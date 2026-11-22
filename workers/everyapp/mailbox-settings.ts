@@ -34,6 +34,11 @@ export interface PortMailboxSettings {
 	 * are drafted when asked, over MCP (`draft_reply`) or in the agent's chat.
 	 */
 	autoDraft?: boolean;
+	/** Forwarding configuration for copy-forwarding inbound mail. */
+	forwarding?: {
+		enabled?: boolean;
+		email?: string;
+	};
 }
 
 /** Whether new mail gets an auto-draft: only when the mailbox's settings turn it on. */
