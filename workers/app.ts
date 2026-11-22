@@ -33,9 +33,9 @@ type InboundEmail = {
 	forward?: (destination: string, headers?: Headers) => Promise<void>;
 };
 
-function forwardingDestination(settings: { forwarding?: { enabled?: boolean; email?: string } } | null): string {
-	const dest = settings?.forwarding?.enabled ? (settings.forwarding.email || "").trim() : "";
-	return dest;
+function forwardingDestination(settings: Record<string, unknown> | null): string {
+	const forwarding = settings?.forwarding as { enabled?: boolean; email?: string } | undefined;
+	return forwarding?.enabled ? (forwarding.email || "").trim() : "";
 }
 
 function envelopeRecipient(event: InboundEmail): string {
